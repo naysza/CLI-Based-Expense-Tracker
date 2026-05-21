@@ -1,0 +1,180 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define MAX_STR_LEN 50
+#define DATA_FILE "expenses.dat"
+
+// Define the structure for an expense
+typedef struct {
+    char date[MAX_STR_LEN];     // Format: YYYY-MM-DD
+    char category[MAX_STR_LEN]; // e.g., Food, Transport, Utilities
+    char description[MAX_STR_LEN];
+    double amount;
+} Expense;
+
+// Function Prototypes
+void display_menu();
+void add_expense(Expense **expenses, int *count, int *capacity);
+void view_expenses(const Expense *expenses, int count);
+void calculate_total(const Expense *expenses, int count);
+void save_to_file(const Expense *expenses, int count);
+void load_from_file(Expense **expenses, int *count, int *capacity);
+
+int main() {
+    Expense *expenses = NULL;
+    int count = 0;
+    int capacity = 0;
+
+    // Load existing data on startup
+    load_from_file(&expenses, &count, &capacity);
+
+    int choice;
+    do {
+        display_menu();
+        printf("Enter your choice (1-4): ");
+        if (scanf("%d", &choice) != 1) {
+            printf("\n[Error] Invalid input. Please enter a number.\n");
+            while (getchar() != '\n'); // Clear input buffer
+            continue;
+        }
+        while (getchar() != '\n'); // Clear newline character left by scanf
+
+        switch (choice) {
+            case 1:
+                add_expense(&expenses, &count, &capacity);
+                break;
+            case 2:
+                view_expenses(expenses, count);
+                break;
+            case 3:
+                calculate_total(expenses, count);
+                break;
+            case 4:
+                printf("\nSaving data and exiting. Goodbye!\n");
+                save_to_file(expenses, count);
+                break;
+            default:
+                printf("\n[Warning] Invalid choice! Please select between 1 and 4.\n");
+        }
+    } while (choice != 4);
+
+    // Free dynamically allocated memory before exit
+    free(expenses);
+    return 0;
+}
+
+void display_menu() {
+    printf("\n========================================\n");
+    printf("     CLI EXPENSE TRACKER (C CORE)       \n");
+    printf("========================================\n");
+    printf("1. Add New Expense\n");
+    printf("2. View All Expenses\n");
+    printf("3. Calculate Total Expenditures\n");
+    printf("4. Save & Exit\n");
+    printf("========================================\n");
+}
+
+void add_expense(Expense **expenses, int *count, int *capacity) {
+    // If array is full, double its capacity dynamically
+    if (*count >= *capacity) {
+        *capacity = (*capacity == 0) ? 4 : (*capacity * 2);
+        Expense *temp = realloc(*expenses, (*capacity) * sizeof(Expense));
+        if (temp == NULL) {
+            printf("\n[Fatal Error] Out of memory! Could not allocate space.\n");
+            return;
+        }
+        *expenses = temp;
+    }
+
+    Expense *current = &((*expenses)[*count]);
+
+    printf("\nEnter Date (YYYY-MM-DD): ");
+    fgets(current->date, MAX_STR_LEN, stdin);
+    current->date[strcspn(current->date, "\n")] = 0; // Remove trailing newline
+
+    printf("Enter Category (e.g., Food, Transport): ");
+    fgets(current->category, MAX_STR_LEN, stdin);
+    current->category[strcspn(current->category, "\n")] = 0;
+
+    printf("Enter Description: ");
+    fgets(current->description, MAX_STR_LEN, stdin);
+    current->description[strcspn(current->description, "\n")] = 0;
+
+    printf("Enter Amount ($): ");
+    if (scanf("%lf", &(current->amount)) != 1 || current->amount < 0) {
+        printf("\n[Error] Invalid amount entered. Transaction aborted.\n");
+        while (getchar() != '\n'); 
+        return;
+    }
+    while (getchar() != '\n');
+
+    (*count)++;
+    printf("\n[Success] Expense added locally!\n");
+}
+
+void view_expenses(const Expense *expenses, int count) {
+    if (count == 0) {
+        printf("\nNo expenses tracked yet.\n");
+        return;
+    }
+
+    printf("\n%-12s | %-15s | %-20s | %-10s\n", "Date", "Category", "Description", "Amount");
+    printf("-------------------------------------------------------------------------\n");
+    for (int i = 0; i < count; i++) {
+        printf("%-12s | %-15s | %-20s | $%-9.2f\n", 
+               expenses[i].date, expenses[i].category, expenses[i].description, expenses[i].amount);
+    }
+    printf("-------------------------------------------------------------------------\n");
+}
+
+void calculate_total(const Expense *expenses, int count) {
+    if (count == 0) {
+        printf("\nTotal Expenses: $0.00\n");
+        return;
+    }
+
+    double total = 0;
+    for (int i = 0; i < count; i++) {
+        total += expenses[i].amount;
+    }
+    printf("\n========================================\n");
+    printf(" TOTAL ACCUMULATED EXPENDITURE: $%.2f\n", total);
+    printf("========================================\n");
+}
+
+void save_to_file(const Expense *expenses, int count) {
+    FILE *file = fopen(DATA_FILE, "wb"); // Open in binary write mode
+    if (file == NULL) {
+        printf("[Error] Could not open file to save data.\n");
+        return;
+    }
+
+    // Save the count first, then block-write the array structures
+    fwrite(&count, sizeof(int), 1, file);
+    if (count > 0) {
+        fwrite(expenses, sizeof(Expense), count, file);
+    }
+    fclose(file);
+}
+
+void load_from_file(Expense **expenses, int *count, int *capacity) {
+    FILE *file = fopen(DATA_FILE, "rb"); // Open in binary read mode
+    if (file == NULL) {
+        // File doesn't exist yet; clean initial run
+        return;
+    }
+
+    fread(count, sizeof(int), 1, file);
+    if (*count > 0) {
+        *capacity = *count;
+        *expenses = malloc((*capacity) * sizeof(Expense));
+        if (*expenses == NULL) {
+            printf("[Fatal Error] Failed to allocate memory during data load.\n");
+            fclose(file);
+            exit(1);
+        }
+        fread(*expenses, sizeof(Expense), *count, file);
+    }
+    fclose(file);
+}
